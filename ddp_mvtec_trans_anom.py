@@ -166,8 +166,13 @@ def train(gpu, args):
                                                    shuffle=True,
                                                    num_workers=2,
                                                    pin_memory=True)
+        loss_values = []
+        anom_loss_values = []
+        ae_loss_values = []
         for epoch in range(args.start_epoch, args.start_epoch + args.epochs):
             train_loss = 0
+            running_anom_loss = 0.0
+            running_ae_loss = 0.0
             for batch_idx, (inputs, masks, targets) in enumerate(train_loader):
                 inputs, targets = inputs.cuda(), targets.cuda()
                 enc_optimizer.zero_grad()
@@ -183,14 +188,34 @@ def train(gpu, args):
                 gen_optimizer.step()
                 disc_optimizer.step()
 
+
                 train_loss += loss.item()
+                running_anom_loss += anom_loss.item()
+                running_ae_loss += ae_loss.item()
                 # _, predicted = outputs.max(1)
                 # total += targets.size(0)
                 # correct += predicted.eq(targets).sum().item()
                 if gpu == 0:
                     print("Epoch No. ", epoch, "Batch Index.", batch_idx, "_ae Loss: ", (ae_loss/(batch_idx + 1)), "_anom_loss_", (anom_loss/(batch_idx + 1)), "_total loss_", (train_loss /(batch_idx + 1)))
 
+            if gpu == 0:
+                # Track
+                loss_values.append(train_loss/len(train_set))
+                anom_loss_values.append(running_anom_loss / len(train_set))
+                ae_loss_values.append(running_ae_loss / len(train_set))
+
         if gpu == 0:
+            # Plotting all losses
+            fig, axs = plt.subplots(3)
+            fig.suptitle('Vertically stacked subplots')
+            axs[0].set_title("Overall Training Loss over Epochs")
+            axs[0].plot(loss_values)
+            axs[1].set_title("Reconsutrction Loss over Epochs")
+            axs[1].plot(ae_loss_values)
+            axs[2].set_title("Anomaly Detection Loss over Epochs")
+            axs[2].plot(anom_loss_values)
+            plt.savefig("train_loss_plt.png")
+
             print("saving model...")
             torch.save({
                 'epoch': epoch,
