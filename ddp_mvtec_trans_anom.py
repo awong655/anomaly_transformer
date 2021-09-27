@@ -100,12 +100,16 @@ def get_discrim(d_net: torch.nn.Module, x_input: torch.Tensor, x_enc: torch.Tens
 def discrim_loss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor,
                  x_real_enc: torch.Tensor) -> torch.Tensor:
     pred_real = d_net(x_real, x_real_enc.detach())
-    pred_fake = d_net(x_fake.detach(), x_real_enc.detach())
+    pred_fake = d_net(x_fake.detach(), x_real_enc.detach()) # new leaf in graph because these values are
+                                                            # calculated by the other model.
+
+    #print("PRED REAL OUTPUT: ", pred_real)
+    #print("PRED FAKE OUTPUT: ", pred_fake)
 
     pred_real = pred_real.sum(dim=1, keepdim=True).squeeze()
-    pred_real[pred_real > 1] = 1
+    #pred_real[pred_real > 1] = 1
     pred_fake = pred_fake.sum(dim=1, keepdim=True).squeeze()
-    pred_fake[pred_fake > 1] = 1
+    #pred_fake[pred_fake > 1] = 1
 
     y_real = torch.zeros_like(pred_real)
     y_fake = torch.ones_like(pred_fake) # these are ones because anom = 1, normal = 0
@@ -188,7 +192,6 @@ def train(gpu, args):
                 gen_optimizer.step()
                 disc_optimizer.step()
 
-
                 train_loss += loss.item()
                 running_anom_loss += anom_loss.item()
                 running_ae_loss += ae_loss.item()
@@ -214,7 +217,7 @@ def train(gpu, args):
             axs[1].plot(ae_loss_values)
             axs[2].set_title("Anomaly Detection Loss over Epochs")
             axs[2].plot(anom_loss_values)
-            plt.savefig("train_loss_plt.png")
+            plt.savefig(cls + "_train_loss_plt.png")
 
             print("saving model...")
             torch.save({

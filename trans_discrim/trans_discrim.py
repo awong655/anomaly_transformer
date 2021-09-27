@@ -132,6 +132,7 @@ class ViT_Discrim(nn.Module):
         )
 
         self.anom_mlp = MLP(input_dim=dim, hidden_dim=dim_disc_head, output_dim=1, num_layers=1)
+        self.anom_fc = torch.nn.Linear(dim, 1)
 
     def forward(self, img, enc_attn):
         x = self.to_patch_embedding(img)
