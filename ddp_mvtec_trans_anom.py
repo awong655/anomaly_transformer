@@ -90,34 +90,50 @@ def print_top_classes(predictions, **kwargs):
         output_string += 'value = {:.3f}\t prob = {:.1f}%'.format(predictions[0, cls_idx], 100 * prob[0, cls_idx])
         print(output_string)
 
-def get_discrim(d_net: torch.nn.Module, x_input: torch.Tensor, x_enc: torch.Tensor) -> torch.Tensor:
-	pred = d_net(x_input, x_enc.detach())
-	pred = pred.sum(dim=1, keepdim=True).squeeze()
-	pred[pred > 1] = 1
-	return pred
+def get_discrim(d_net: torch.nn.Module, x_input: torch.Tensor, x_enc: torch.Tensor):
+    anom_pred, patch_pred = d_net(x_input, x_enc.detach())
+    print("ANOM_PRED", torch.sigmoid(anom_pred))
+    #print("PATCH_PRED", patch_pred)
+    anom_pred = torch.round(torch.sigmoid(anom_pred))
+    patch_pred = torch.round(patch_pred)
+    #anom_pred = pred.sum(dim=1, keepdim=True).squeeze()
+    # #anom_pred[anom_pred > 1] = 1
+    return anom_pred, patch_pred
 
 # from ALOC- modified
 def discrim_loss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor,
                  x_real_enc: torch.Tensor) -> torch.Tensor:
-    pred_real = d_net(x_real, x_real_enc.detach())
-    pred_fake = d_net(x_fake.detach(), x_real_enc.detach()) # new leaf in graph because these values are
+    pred_real, _ = d_net(x_real, x_real_enc.detach())
+    pred_fake, _ = d_net(x_fake.detach(), x_real_enc.detach()) # new leaf in graph because these values are
                                                             # calculated by the other model.
 
     #print("PRED REAL OUTPUT: ", pred_real)
     #print("PRED FAKE OUTPUT: ", pred_fake)
 
-    pred_real = pred_real.sum(dim=1, keepdim=True).squeeze()
+    #pred_real = pred_real.sum(dim=1, keepdim=True).squeeze()
     #pred_real[pred_real > 1] = 1
-    pred_fake = pred_fake.sum(dim=1, keepdim=True).squeeze()
+    #pred_fake = pred_fake.sum(dim=1, keepdim=True).squeeze()
     #pred_fake[pred_fake > 1] = 1
 
     y_real = torch.zeros_like(pred_real)
     y_fake = torch.ones_like(pred_fake) # these are ones because anom = 1, normal = 0
-
+    #print("REAL PRED", pred_real)
+    #print("FAKE PRED", pred_fake)
     real_loss = F.binary_cross_entropy_with_logits(pred_real, y_real)
     fake_loss = F.binary_cross_entropy_with_logits(pred_fake, y_fake)
 
     return real_loss + fake_loss
+
+def r_loss(d_net, x_real, x_fake, x_real_enc, lamb):
+    anom_pred, patch_pred = d_net(x_fake, x_real_enc)
+    y = torch.ones_like(anom_pred)
+    
+    rec_loss = F.mse_loss(x_fake, x_real)
+    gen_loss = F.binary_cross_entropy_with_logits(anom_pred, y) # Generator loss
+    
+    L_r = gen_loss + lamb * rec_loss
+    
+    return rec_loss, gen_loss, L_r
 
 def train(gpu, args):
     print("Cuda Device:", torch.cuda.current_device())
@@ -156,8 +172,8 @@ def train(gpu, args):
         ae_criterion = nn.MSELoss()
 
         enc_optimizer = optim.Adam(encoder.parameters(), lr=3e-5)
-        gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, eps=1e-08)
-        disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.001, eps=1e-08)
+        gen_optimizer = optim.Adam(generator.parameters(), lr=0.00001, eps=1e-08)
+        disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, eps=1e-08)
 
         _transforms = transforms.Compose([
             transforms.Resize((32, 32)),
@@ -166,57 +182,61 @@ def train(gpu, args):
         train_set = MVTecADDataset(root='./mvtec', target=cls, transforms=_transforms, mask_transforms=_transforms,
                                    train=True)
         train_loader = torch.utils.data.DataLoader(dataset=train_set,
-                                                   batch_size=30,
+                                                   batch_size=25,
                                                    shuffle=True,
                                                    num_workers=2,
                                                    pin_memory=True)
-        loss_values = []
-        anom_loss_values = []
         ae_loss_values = []
+        gen_loss_values = []
+        disc_loss_values = []
         for epoch in range(args.start_epoch, args.start_epoch + args.epochs):
-            train_loss = 0
-            running_anom_loss = 0.0
-            running_ae_loss = 0.0
+            running_ae_loss = 0
+            running_generator_loss = 0.0
+            running_disc_loss = 0.0
             for batch_idx, (inputs, masks, targets) in enumerate(train_loader):
                 inputs, targets = inputs.cuda(), targets.cuda()
                 enc_optimizer.zero_grad()
                 gen_optimizer.zero_grad()
                 disc_optimizer.zero_grad()
+                
                 encodings = encoder(inputs)
                 recons = generator(encodings[:,0]) # first element of each sequence of patches is cls embedding
                 anom_loss = discrim_loss(discriminator, inputs, recons, encodings)
-                ae_loss = ae_criterion(recons, inputs)
-                loss = ae_loss + anom_loss
-                loss.backward()
+                anom_loss.backward()
+                disc_optimizer.step()
+                
+                ae_loss,generator_loss,recon_loss = r_loss(discriminator, inputs, recons, encodings, 0.2)
+                #ae_loss = ae_criterion(recons, inputs)
+                #loss = ae_loss + anom_loss
+                recon_loss.backward()
                 enc_optimizer.step()
                 gen_optimizer.step()
-                disc_optimizer.step()
 
-                train_loss += loss.item()
-                running_anom_loss += anom_loss.item()
                 running_ae_loss += ae_loss.item()
+                running_generator_loss += generator_loss.item()
+                running_disc_loss += anom_loss.item()
                 # _, predicted = outputs.max(1)
                 # total += targets.size(0)
                 # correct += predicted.eq(targets).sum().item()
                 if gpu == 0:
-                    print("Epoch No. ", epoch, "Batch Index.", batch_idx, "_ae Loss: ", (ae_loss/(batch_idx + 1)), "_anom_loss_", (anom_loss/(batch_idx + 1)), "_total loss_", (train_loss /(batch_idx + 1)))
+                    print("Epoch No. ", epoch, "Batch Index.", batch_idx, "_ae Loss: ", (running_ae_loss/(batch_idx + 1)), "_gen_loss_", (running_generator_loss/(batch_idx + 1)), "_disc loss_", (running_disc_loss /(batch_idx + 1)))
 
             if gpu == 0:
                 # Track
-                loss_values.append(train_loss/len(train_set))
-                anom_loss_values.append(running_anom_loss / len(train_set))
-                ae_loss_values.append(running_ae_loss / len(train_set))
+                ae_loss_values.append(running_ae_loss/len(train_set))
+                gen_loss_values.append(running_generator_loss / len(train_set))
+                disc_loss_values.append(running_disc_loss / len(train_set))
 
         if gpu == 0:
             # Plotting all losses
             fig, axs = plt.subplots(3)
             fig.suptitle('Vertically stacked subplots')
-            axs[0].set_title("Overall Training Loss over Epochs")
-            axs[0].plot(loss_values)
-            axs[1].set_title("Reconsutrction Loss over Epochs")
-            axs[1].plot(ae_loss_values)
-            axs[2].set_title("Anomaly Detection Loss over Epochs")
-            axs[2].plot(anom_loss_values)
+            axs[0].set_title("Reconstruction Loss over Epochs")
+            axs[0].plot(ae_loss_values)
+            axs[1].set_title("Generator Loss over Epochs")
+            axs[1].plot(gen_loss_values)
+            axs[2].set_title("Discriminator Loss over Epochs")
+            axs[2].plot(disc_loss_values)
             plt.savefig(cls + "_train_loss_plt.png")
 
             print("saving model...")
@@ -237,8 +257,6 @@ def train(gpu, args):
             }, "./checkpoint/ckpt_disc_" + classes[idx] + ".pth")
             print("Save complete.")
 
-
-
 def test(epoch, cls, encoder, generator, discriminator, ae_criterion, testloader, loader_idx, device):
     with torch.no_grad():
         print("TESTING")
@@ -253,7 +271,7 @@ def test(epoch, cls, encoder, generator, discriminator, ae_criterion, testloader
             targets[targets>0] = 1
             encodings = encoder(inputs)
             recons = generator(encodings[:,0]) # first element of each sequence of patches is cls embedding. Only use this to generate reconstruction
-            anom_res = get_discrim(discriminator, inputs, encodings)
+            anom_pred, anom_patch_pred = get_discrim(discriminator, inputs, encodings)
             anom_loss = discrim_loss(discriminator, inputs, recons, encodings)
             ae_loss = ae_criterion(recons, inputs)
             loss = ae_loss + anom_loss
@@ -261,7 +279,7 @@ def test(epoch, cls, encoder, generator, discriminator, ae_criterion, testloader
             print("TEST: Epoch No. ", epoch, "Batch Index.", batch_idx, "Loss: ", (test_loss / (batch_idx + 1)))
             # if (batch_idx % 50 == 0):
             print("input_Inlier: " + classes[loader_idx] + "_epoch_" + str(
-                epoch) + "_" + str(batch_idx) + "_anom_result_" + str(anom_res))
+                epoch) + "_" + str(batch_idx) + "_anom_result_" + str(anom_pred))
             print("target_Inlier: " + classes[loader_idx] + "_epoch_" + str(
                 epoch) + "_" + str(batch_idx) + "_anom_result_" + str(targets))
             cpu_inp = inputs.cpu()
@@ -339,7 +357,7 @@ def main(args):
 
             print("only testing")
             checkpoints = list(load_models(args.checkpoint_directory))
-            tmp_dict = torch.load(args.checkpoint_directory + "/" + checkpoints[idx][0])['model_state_dict']
+            tmp_dict = torch.load(args.checkpoint_directory + "/" + checkpoints[0][0])['model_state_dict']
             enc_state_dict = OrderedDict()
             for k, v in tmp_dict.items():
                 name = k[:]  # remove `module.`
@@ -347,7 +365,7 @@ def main(args):
             encoder.load_state_dict(enc_state_dict)
             encoder = encoder.to(device)
             print("loaded encoder")
-            tmp_dict = torch.load(args.checkpoint_directory + "/" + checkpoints[idx][1])['model_state_dict']
+            tmp_dict = torch.load(args.checkpoint_directory + "/" + checkpoints[0][1])['model_state_dict']
             gen_state_dict = OrderedDict()
             for k, v in tmp_dict.items():
                 name = k[:]  # remove `module.`
@@ -355,7 +373,7 @@ def main(args):
             generator.load_state_dict(gen_state_dict)
             generator = generator.to(device)
             print("loaded generator")
-            tmp_dict = torch.load(args.checkpoint_directory + "/" + checkpoints[idx][2])['model_state_dict']
+            tmp_dict = torch.load(args.checkpoint_directory + "/" + checkpoints[0][2])['model_state_dict']
             disc_state_dict = OrderedDict()
             for k, v in tmp_dict.items():
                 name = k[:]  # remove `module.`

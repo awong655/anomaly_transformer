@@ -21,7 +21,7 @@ class PreNorm(nn.Module):
         return self.fn(self.norm(x), **kwargs)
 
 class MLP(nn.Module):
-    """ Very simple multi-layer perceptron (also called FFN)"""
+    """ Very simple multi-layer perceptron (also called FFN) using the sigmoid activation function"""
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
@@ -31,6 +31,7 @@ class MLP(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
+            #x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
 
@@ -131,8 +132,9 @@ class ViT_Discrim(nn.Module):
             nn.Linear(dim, num_classes)
         )
 
-        self.anom_mlp = MLP(input_dim=dim, hidden_dim=dim_disc_head, output_dim=1, num_layers=1)
-        self.anom_fc = torch.nn.Linear(dim, 1)
+        self.patch_anom_mlp = MLP(input_dim=dim, hidden_dim=dim_disc_head, output_dim=1, num_layers=2)
+        #self.anom_ff = MLP(input_dim=int(image_size/patch_size)**2, hidden_dim=dim_disc_head, output_dim=1, num_layers=1)
+        self.anom_lin = nn.Linear(int(image_size/patch_size)**2, 1)
 
     def forward(self, img, enc_attn):
         x = self.to_patch_embedding(img)
@@ -157,10 +159,15 @@ class ViT_Discrim(nn.Module):
         # each patch fed through MLP to get prediction
         fdim, sdim, tdim = x.shape
         flt = x.reshape((x.shape[0]*x.shape[1], x.shape[2]))
-        x = self.anom_mlp(flt) # patch wise anomaly prediction
-
+        x = self.patch_anom_mlp(flt) # patch wise anomaly prediction
         # reshape list of patch predictions to original number of images and patches
         # this groups all patch predictions into 1 row per image
-        x = x.reshape((fdim, sdim))
+        x = x.reshape((fdim, sdim)) # This is the patch prediction.
+        patch_pred = x
+        x = self.anom_lin(x)
 
-        return x
+        # Backprop on overall binary anomaly decision
+        # Individual patch anomaly decision contribute to the overall binary anomaly decision
+        # Therefore, patch anomaly segmentation is done in an unsupervised manner
+        return x, patch_pred # return overall anomaly score
+
