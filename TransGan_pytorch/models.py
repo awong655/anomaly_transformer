@@ -120,7 +120,8 @@ class Generator(nn.Module):
         self.TransformerEncoder_encoder3 = TransformerEncoder(depth=self.depth3, dim=self.dim//16, heads=self.heads, mlp_ratio=self.mlp_ratio, drop_rate=self.droprate_rate)
 
 
-        self.linear = nn.Sequential(nn.Conv2d(self.dim//16, 3, 1, 1, 0))
+        #self.linear = nn.Sequential(nn.Conv2d(self.dim//16, 3, 1, 1, 0))
+        self.linear = nn.Sequential(nn.Conv2d(self.dim // 16, 1, 1, 1, 0))
 
     def forward(self, noise):
 
