@@ -51,7 +51,7 @@ def main(args):
 
 
 def get_discrim(d_net: torch.nn.Module, x_input: torch.Tensor):
-    anom_pred = d_net(x_input)
+    anom_pred, patch_pred = d_net(x_input)
     print("SIGMOID ANOM_PRED", torch.sigmoid(anom_pred))
     # print("PATCH_PRED", patch_pred)
     anom_pred = torch.round(torch.sigmoid(anom_pred))
@@ -62,12 +62,12 @@ def get_discrim(d_net: torch.nn.Module, x_input: torch.Tensor):
 
 def adv_loss(d_net: torch.nn.Module, x: torch.Tensor, isFake) -> torch.Tensor:
     if isFake is True:
-        pred_fake = d_net(x)
+        pred_fake, patch_pred_fake = d_net(x)
         y_fake = torch.ones_like(pred_fake)
         fake_loss = F.binary_cross_entropy_with_logits(pred_fake, y_fake)
         return fake_loss
     else:
-        pred_real = d_net(x)
+        pred_real, patch_pred_real = d_net(x)
         y_real = torch.zeros_like(pred_real)
         real_loss = F.binary_cross_entropy_with_logits(pred_real, y_real)
         return real_loss
@@ -75,8 +75,8 @@ def adv_loss(d_net: torch.nn.Module, x: torch.Tensor, isFake) -> torch.Tensor:
 
 # from ALOC- modified
 def discrim_loss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor) -> torch.Tensor:
-    pred_real = d_net(x_real)
-    pred_fake = d_net(x_fake.detach())  # new leaf in graph because these values are
+    pred_real, patch_pred_real = d_net(x_real)
+    pred_fake, patch_pred_fake = d_net(x_fake.detach())  # new leaf in graph because these values are
     # calculated by the other model.
     #print("real prediction", torch.sigmoid(pred_real))
     #print("fake prediction", torch.sigmoid(pred_fake))
@@ -104,7 +104,7 @@ def discrim_loss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Ten
 
 
 def r_loss(d_net, x_real, x_fake, lamb):
-    anom_pred = d_net(x_fake)
+    anom_pred, patch_pred = d_net(x_fake)
     y = torch.ones_like(anom_pred)
 
     rec_loss = F.mse_loss(x_fake, x_real)
@@ -191,12 +191,12 @@ def train(gpu, args):
 
         generator = tmpTransGan(depth1=5, depth2=2, depth3=2, initial_size=8, dim=128,
                                 heads=4, mlp_ratio=4, drop_rate=0.5).get_TransGan()
-        '''
+
         discriminator = ViT_Discrim_Seperate(image_size=32, patch_size=4, dim=128,
                                     depth=3, heads=4, mlp_dim=64, channels=1,
                                     dim_disc_head=64)
-        '''
-        discriminator = conv_models.D_Net(in_resolution= (32,32), in_channels=1)
+
+        #discriminator = conv_models.D_Net(in_resolution= (32,32), in_channels=1)
         encoder = encoder.cuda()
         generator = generator.cuda()
         discriminator = discriminator.cuda()

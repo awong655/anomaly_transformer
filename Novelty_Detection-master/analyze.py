@@ -9,7 +9,8 @@ import torch.nn.functional as F
 from sklearn.metrics import auc, roc_curve
 import cv2
 import numpy as np
-
+from einops import rearrange, repeat
+from einops.layers.torch import Rearrange
 
 def analyze_model(r_net: torch.nn.Module,
                 d_net: torch.nn.Module,
@@ -93,31 +94,57 @@ def analyze_model(r_net: torch.nn.Module,
 
     return (r_net, d_net)
 
+def pair(t):
+    return t if isinstance(t, tuple) else (t, t)
+
+def get_patches(imgs, patch_size):
+    patch_height, patch_width = pair(patch_size)
+    return rearrange(imgs, 'b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1 = patch_height, p2 = patch_width)
+
+def patch_to_img(patches, patch_size):
+    patch_height, patch_width = pair(patch_size)
+    return rearrange(patches, 'b (h w) (p1 p2 c) -> b c (h p1) (w p2)', p1=patch_height, p2=patch_width, h=8, w=8)
+
+# patch predictions are a sequence of 0s and 1s, 0 = normal, 1 = anomaly
+def get_patch_visualizations(d_net, x_input):
+    real_pred, patch_pred = d_net(x_input)
+    patch_pred = torch.round(torch.absolute(1 - torch.sigmoid(patch_pred)))  # flip from 0 as anomaly to 1 as anomaly
+
+    patches = get_patches(x_input, 4)
+    patch_pred = patch_pred.unsqueeze(-1)
+    patch_pred = patch_pred.expand(-1, -1, 16)
+
+    patch_anomalies = torch.mul(patches, patch_pred)
+    image_anomalies = patch_to_img(patches, 4)
+    return image_anomalies
+
 def auc_patch_pred(d_net, x_real, x_fake):
-    real_pred, patch_pred_real = d_net(x_real)
-    fake_pred, patch_pred_fake = d_net(x_fake.detach())
+	real_pred, patch_pred_real = d_net(x_real)
+	fake_pred, patch_pred_fake = d_net(x_fake.detach())
 
-    patch_pred_real = torch.round(torch.sigmoid(patch_pred_real))
-    real_pred = patch_pred_real.sum(dim=1, keepdim=True).squeeze()
-    real_pred[real_pred > 1] = 1
+	patch_pred_real = torch.absolute(1 - torch.sigmoid(patch_pred_real)) # flip from 0 as anomaly to 1 as anomaly
+	patch_pred_fake = torch.absolute(1 - torch.sigmoid(patch_pred_fake)) # flip from 0 as anomaly to 1 as anomaly
+	patch_pred_real = torch.round(patch_pred_real)
+	real_pred = patch_pred_real.sum(dim=1, keepdim=True).squeeze()
+	real_pred[real_pred > 1] = 1
 
-    print("PATCH PREDICTION REAL NO ROUND", patch_pred_real)
+	print("PATCH PREDICTION REAL NO ROUND", patch_pred_real)
 
-    patch_pred_fake = torch.round(torch.sigmoid(patch_pred_fake))
-    fake_pred = patch_pred_fake.sum(dim=1, keepdim=True).squeeze()
-    fake_pred[fake_pred > 1] = 1
+	patch_pred_fake= torch.round(patch_pred_fake)
+	fake_pred = patch_pred_fake.sum(dim=1, keepdim=True).squeeze()
+	fake_pred[fake_pred > 1] = 1
 
-    print("PATCH PREDICTION FAKE NO ROUND", fake_pred)
+	print("PATCH PREDICTION FAKE NO ROUND", fake_pred)
 
-    y_real = torch.ones_like(real_pred)
-    y_fake = torch.zeros_like(real_pred)
-    all_pred = torch.cat((real_pred, fake_pred))
-    print("PATCH PREDICTION", all_pred)
-    all_y = torch.cat((y_real, y_fake))
-    print("PATCH TARGETS", all_y)
-    fpr, tpr, thresholds = roc_curve(all_y.cpu().numpy(), all_pred.cpu().numpy())
-    pred_auc = auc(fpr, tpr)
-    return pred_auc
+	y_real = torch.zeros_like(real_pred)
+	y_fake = torch.ones_like(real_pred)
+	all_pred = torch.cat((real_pred, fake_pred))
+	print("PATCH PREDICTION", all_pred)
+	all_y = torch.cat((y_real, y_fake))
+	print("PATCH TARGETS", all_y)
+	fpr, tpr, thresholds = roc_curve(all_y.cpu().numpy(), all_pred.cpu().numpy())
+	pred_auc = auc(fpr, tpr)
+	return pred_auc
 
 
 # #anom_pred[anom_pred > 1] = 1
@@ -131,9 +158,9 @@ def auc_pred(d_net, x_real, x_fake):
     y_real = torch.ones_like(real_pred)
     y_fake = torch.zeros_like(real_pred)
     all_pred = torch.cat((real_pred, fake_pred))
-    print("NON PATCH PRED", all_pred)
+    #print("NON PATCH PRED", all_pred)
     all_y = torch.cat((y_real, y_fake))
-    print("NON PATCH TARGETS", all_y)
+    #print("NON PATCH TARGETS", all_y)
     fpr, tpr, thresholds = roc_curve(all_y.cpu().numpy(), all_pred.cpu().numpy())
     pred_auc = auc(fpr, tpr)
     return pred_auc
@@ -162,13 +189,16 @@ def validate_single_epoch(r_net, d_net, r_loss, d_loss, valid_loader, device, ep
 
             x_real = data[0].to(device)
             x_fake = r_net(x_real)
-
+            #x_real_anomalies = get_patch_visualizations(d_net, x_real)
+            x_fake_anomalies = get_patch_visualizations(d_net, x_real)
             # print("Real Prediction", torch.sigmoid(d_net(x_real)))
             # print("Fake Prediction", torch.sigmoid(d_net(x_fake)))
 
             dis_loss = d_loss(d_net, x_real, x_fake, do_print=False)
 
             r_metrics = r_loss(d_net, x_real, x_fake, 0)
+
+
 
             valid_metrics['rec_loss'] += r_metrics['rec_loss']
             valid_metrics['gen_loss'] += r_metrics['gen_loss']
@@ -180,10 +210,13 @@ def validate_single_epoch(r_net, d_net, r_loss, d_loss, valid_loader, device, ep
                 print(f'Saving test images on epoch {epoch}')
                 # plot_learning_curves(metrics, metric_path)
                 save_image(make_grid(x_real, nrows=10),
-                           "../cifar_imgs/ae_recons/test_input_epoch_" + str(
+                           "../cifar_imgs/analysis/test_input_epoch_" + str(
                                epoch) + "_" + str(batch_idx) + ".jpg")
                 save_image(make_grid(x_fake, nrows=10),
-                           "../cifar_imgs/ae_recons/test_recon_epoch_" + str(
+                           "../cifar_imgs/analysis/test_recon_epoch_" + str(
+                               epoch) + "_" + str(batch_idx) + ".jpg")
+                save_image(make_grid(x_fake_anomalies, nrows=10),
+                           "../cifar_imgs/analysis/analyze_anomalies" + str(
                                epoch) + "_" + str(batch_idx) + ".jpg")
 
     valid_metrics['rec_loss'] = valid_metrics['rec_loss'].item() / (len(valid_loader.dataset) / valid_loader.batch_size)

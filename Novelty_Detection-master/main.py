@@ -34,6 +34,7 @@ def main(args):
 	# Train and validate only on pictures of 1
 	train_dataset = Dataset(train_raw_dataset, [1])
 	valid_dataset = Dataset(valid_raw_dataset, [0,1,2,3,4,5,6,7,8,9])
+	#valid_dataset = Dataset(valid_raw_dataset, [1])
 	indices = np.arange(0,len(valid_dataset))
 	valid_indices = torch.from_numpy(np.random.choice(indices, size=500, replace=False))
 	valid_dataset = torch.utils.data.Subset(valid_dataset, valid_indices)
@@ -104,6 +105,7 @@ if __name__ == "__main__":
 	parser.add_argument('--cat', action='store_true', help='Turns on skip connections with concatenation')
 	parser.add_argument('--res', action='store_true', help='Turns on residual connections')
 	parser.add_argument('--analyze', '-a', type=str, default='no', help='to analyze or not')
+	parser.add_argument('--disc', '-dc', type=str, default='trans', help='What kind of discriminator to use')
 	args = parser.parse_args()
 
 	main(args)
