@@ -1,5 +1,7 @@
 import os
 import torch
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
 from torchvision.utils import save_image, make_grid
@@ -9,7 +11,7 @@ import cv2
 import numpy as np
 
 
-def train_model(r_net: torch.nn.Module,
+def analyze_model(r_net: torch.nn.Module,
                 d_net: torch.nn.Module,
                 train_dataset: torch.utils.data.Dataset,
                 valid_dataset: torch.utils.data.Dataset,
@@ -32,6 +34,7 @@ def train_model(r_net: torch.nn.Module,
                 lambd: float = 0.2,
                 device: torch.device = torch.device('cpu'),
                 save_path: tuple = ('.', 'r_net.pth', 'd_net.pth')) -> tuple:
+    print("TESTINGGGGG**************************************")
     model_path = os.path.join(save_path[0], 'models')
     metric_path = os.path.join(save_path[0], 'metrics')
     r_net_path = os.path.join(model_path, save_path[1])
@@ -86,24 +89,7 @@ def train_model(r_net: torch.nn.Module,
 
             print(f'TIME: {time:.2f} s')
 
-        if lr_scheduler:
-            scheduler_r.step()
-            scheduler_d.step()
-
-        if epoch % save_step == 0:
-            if highestAUCIndex == epoch:
-                torch.save(r_net, r_net_path)
-                torch.save(d_net, d_net_path)
-
-        if valid_metrics['rec_loss'] < rec_loss_bound and train_metrics['rec_loss'] < rec_loss_bound:
-            torch.save(r_net, r_net_path)
-            torch.save(d_net, d_net_path)
-            print('Reconstruction loss achieved optimum')
-            print('Stopping training')
-
-            break
-
-    plot_learning_curves(metrics, metric_path)
+    #plot_learning_curves(metrics, metric_path)
 
     return (r_net, d_net)
 
@@ -152,12 +138,18 @@ def auc_pred(d_net, x_real, x_fake):
     pred_auc = auc(fpr, tpr)
     return pred_auc
 
-def show_cam_on_image(img, mask):
-    heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
-    heatmap = np.float32(heatmap) / 255
-    cam = heatmap + np.float32(img)
-    cam = cam / np.max(cam)
-    return cam
+def show_mask(masks):
+    masks = torch.round(torch.sigmoid(masks))
+    masks = masks.cpu().numpy()
+    masks = np.repeat(masks, 4)
+
+
+    masks = masks.cpu().numpy()
+    masks = np.repeat(masks, 4) # repeat each patch prediction 4 times
+    masks = masks.reshape(masks.shape[0], 32, 32) # reshape to 32 by 32 after repeating each patch prediciton 4 times
+    mask = masks.reshape(imgs.shape)
+    mask = torch.sigmoid(mask)
+    #plt.imsave(fname='', mask.numpy(), cmap='gray')
 
 def validate_single_epoch(r_net, d_net, r_loss, d_loss, valid_loader, device, epoch) -> dict:
     r_net.eval()

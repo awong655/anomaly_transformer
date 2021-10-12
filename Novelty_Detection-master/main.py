@@ -4,8 +4,9 @@ import torch
 import torchvision
 import torchvision.transforms as tf
 from train import train_model
+from analyze import analyze_model
 from model import R_Net, D_Net, R_Loss, D_Loss, R_WLoss, D_WLoss, Dataset, trans_r_net, trans_d_net
-
+import numpy as np
 
 def main(args):
 
@@ -32,7 +33,11 @@ def main(args):
 									transform=tf.Compose([tf.Resize((32, 32)), tf.ToTensor(), tf.Normalize((0.1307,), (0.3081,))]))
 	# Train and validate only on pictures of 1
 	train_dataset = Dataset(train_raw_dataset, [1])
-	valid_dataset = Dataset(valid_raw_dataset, [1])
+	valid_dataset = Dataset(valid_raw_dataset, [0,1,2,3,4,5,6,7,8,9])
+	indices = np.arange(0,len(valid_dataset))
+	valid_indices = torch.from_numpy(np.random.choice(indices, size=500, replace=False))
+	valid_dataset = torch.utils.data.Subset(valid_dataset, valid_indices)
+	print("Valid dataset size", len(valid_dataset))
 	
 	if args.gpu and torch.cuda.is_available():
 		device = torch.device('cuda:0')
@@ -66,10 +71,16 @@ def main(args):
 	optim_r_params = {'alpha' : 0.9, 'weight_decay' : 1e-9}
 	optim_d_params = {'alpha' : 0.9, 'weight_decay' : 1e-9}
 
-	model = train_model(r_net, d_net, train_dataset, valid_dataset, R_Loss, D_Loss, optimizer_class=torch.optim.RMSprop,
-					device=device, batch_size=args.batch_size, optim_r_params=optim_r_params, optim_d_params=optim_d_params,
-					learning_rate=args.lr, rec_loss_bound=args.rec_bound,
-					save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd)
+	if args.analyze != 'no':
+		analyze_model(r_net, d_net, train_dataset, valid_dataset, R_Loss, D_Loss, optimizer_class=torch.optim.RMSprop,
+						device=device, batch_size=args.batch_size, optim_r_params=optim_r_params, optim_d_params=optim_d_params,
+						learning_rate=args.lr, rec_loss_bound=args.rec_bound,
+						save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd)
+	else:
+		model = train_model(r_net, d_net, train_dataset, valid_dataset, R_Loss, D_Loss, optimizer_class=torch.optim.RMSprop,
+						device=device, batch_size=args.batch_size, optim_r_params=optim_r_params, optim_d_params=optim_d_params,
+						learning_rate=args.lr, rec_loss_bound=args.rec_bound,
+						save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd)
 
 	#avg_auc = test_model()
 
@@ -92,6 +103,7 @@ if __name__ == "__main__":
 	parser.add_argument('--lambd', type=float, default=0.2, help='Lambda parameter for LR loss')
 	parser.add_argument('--cat', action='store_true', help='Turns on skip connections with concatenation')
 	parser.add_argument('--res', action='store_true', help='Turns on residual connections')
+	parser.add_argument('--analyze', '-a', type=str, default='no', help='to analyze or not')
 	args = parser.parse_args()
 
 	main(args)

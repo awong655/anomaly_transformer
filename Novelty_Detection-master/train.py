@@ -157,43 +157,26 @@ def train_single_epoch(r_net, d_net, optim_r, optim_d, r_loss, d_loss, train_loa
 
 	return train_metrics
 
-def D_test_Loss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor) -> torch.Tensor:
-	pred_real, _ = d_net(x_real)
-	pred_fake, _ = d_net(x_fake.detach())
-
-	y_real = torch.ones_like(pred_real)
-	y_fake = torch.zeros_like(pred_fake)
-
-	real_loss = F.binary_cross_entropy_with_logits(pred_real, y_real)
-	fake_loss = F.binary_cross_entropy_with_logits(pred_fake, y_fake)
-
-	print("REAL", pred_real)
-	print("REAL SIGMOID", torch.sigmoid(pred_real))
-	print("FAKE", pred_fake)
-	print("FAKE SIGMOID", torch.sigmoid(pred_fake))
-
-	return real_loss + fake_loss
-
 def auc_patch_pred(d_net, x_real, x_fake):
 	real_pred, patch_pred_real = d_net(x_real)
 	fake_pred, patch_pred_fake = d_net(x_fake.detach())
 
-
-
-	patch_pred_real = torch.round(torch.sigmoid(patch_pred_real))
+	patch_pred_real = torch.absolute(1 - torch.sigmoid(patch_pred_real)) # flip from 0 as anomaly to 1 as anomaly
+	patch_pred_fake = torch.absolute(1 - torch.sigmoid(patch_pred_fake)) # flip from 0 as anomaly to 1 as anomaly
+	patch_pred_real = torch.round(patch_pred_real)
 	real_pred = patch_pred_real.sum(dim=1, keepdim=True).squeeze()
 	real_pred[real_pred > 1] = 1
 
 	print("PATCH PREDICTION REAL NO ROUND", patch_pred_real)
 
-	patch_pred_fake= torch.round(torch.sigmoid(patch_pred_fake))
+	patch_pred_fake= torch.round(patch_pred_fake)
 	fake_pred = patch_pred_fake.sum(dim=1, keepdim=True).squeeze()
 	fake_pred[fake_pred > 1] = 1
 
 	print("PATCH PREDICTION FAKE NO ROUND", fake_pred)
 
-	y_real = torch.ones_like(real_pred)
-	y_fake = torch.zeros_like(real_pred)
+	y_real = torch.zeros_like(real_pred)
+	y_fake = torch.ones_like(real_pred)
 	all_pred = torch.cat((real_pred, fake_pred))
 	print("PATCH PREDICTION", all_pred)
 	all_y = torch.cat((y_real, y_fake))
