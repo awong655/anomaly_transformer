@@ -155,8 +155,9 @@ class ViT_Discrim(nn.Module):
         # this groups all patch predictions into 1 row per image
         x = x.reshape((fdim, sdim)) # This is the patch prediction.
         patch_pred = x
-        x = self.anom_lin(x)
-
+        #x = torch.sigmoid(x)
+        x = x.sum(dim=1, keepdim=True).squeeze()
+        #print("final prediction", x)
         # Backprop on overall binary anomaly decision
         # Individual patch anomaly decision contribute to the overall binary anomaly decision
         # Therefore, patch anomaly segmentation is done in an unsupervised manner

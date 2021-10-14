@@ -3,6 +3,7 @@ import torch.nn.functional as F
 
 from autoenc.ae_model import tmpTransGan, facebook_vit
 from trans_discrim.trans_discrim_seperate import ViT_Discrim
+from trans_discrim.trans_discrim import ViT_Discrim as ViT_Discrim_Combined
 from trans_discrim.trans_enc import VisionTransformer
 
 class Dataset(torch.utils.data.Dataset):
@@ -61,7 +62,7 @@ class trans_r_net(torch.nn.Module):
 
 		x_out = self.generator.forward(z[:,0])
 
-		return x_out
+		return z, x_out
 
 	def add_noise(self, x):
 
@@ -69,6 +70,16 @@ class trans_r_net(torch.nn.Module):
 		x_hat = x + noise
 
 		return x_hat
+
+class trans_d_net_combined(torch.nn.Module):
+	def __init__(self, image_size, patch_size, dim, depth, heads, mlp_dim, channels, dim_disc_head):
+		super(trans_d_net_combined, self).__init__()
+		self.discriminator = ViT_Discrim_Combined(image_size=image_size, patch_size=patch_size, dim=dim,
+									depth=depth, heads=heads, mlp_dim=mlp_dim, channels=channels,
+									dim_disc_head=dim_disc_head)
+
+	def forward(self, x: torch.Tensor, x_enc: torch.Tensor):
+		return self.discriminator(x, x_enc)
 
 class trans_d_net(torch.nn.Module):
 	def __init__(self, image_size, patch_size, dim, depth, heads, mlp_dim, channels, dim_disc_head):
@@ -203,6 +214,36 @@ class D_Net(torch.nn.Module):
 		out = self.fc(x)
 
 		return out
+
+def R_Loss_combined(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor, x_real_enc, lambd: float) -> dict:
+
+	pred, _ = d_net(x_fake, x_real_enc)
+	y = torch.zeros_like(pred)
+
+	rec_loss = F.mse_loss(x_fake, x_real)
+	gen_loss = F.binary_cross_entropy_with_logits(pred, y) # generator loss
+
+	L_r = gen_loss + lambd * rec_loss
+
+	return {'rec_loss' : rec_loss, 'gen_loss' : gen_loss, 'L_r' : L_r}
+
+def D_Loss_combined(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor, x_real_enc, do_print=False) -> torch.Tensor:
+	pred_real, _ = d_net(x_real, x_real_enc.detach())
+	pred_fake, _ = d_net(x_fake.detach(), x_real_enc.detach())
+
+	y_real = torch.zeros_like(pred_real)
+	y_fake = torch.ones_like(pred_fake)
+
+	real_loss = F.binary_cross_entropy_with_logits(pred_real, y_real)
+	fake_loss = F.binary_cross_entropy_with_logits(pred_fake, y_fake)
+
+	if do_print:
+		print("REAL", pred_real.squeeze())
+		print("REAL SIGMOID", torch.sigmoid(pred_real).squeeze())
+		print("FAKE", pred_fake.squeeze())
+		print("FAKE SIGMOID", torch.sigmoid(pred_fake).squeeze())
+
+	return real_loss + fake_loss
 
 def R_Loss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor, lambd: float) -> dict:
 
