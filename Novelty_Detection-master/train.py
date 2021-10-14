@@ -311,7 +311,7 @@ def validate_single_epoch_recon(r_net, d_net, r_loss, d_loss, valid_loader, devi
 			targets[targets >= 0] = 0
 			targets[targets < 0] = 1
 			x = data[0].to(device)
-			x_recon = r_net(x)
+			_, x_recon = r_net(x)
 
 			# torch to tensorflow
 			targets = targets.cpu().numpy()
@@ -354,7 +354,7 @@ def validate_single_epoch_recon(r_net, d_net, r_loss, d_loss, valid_loader, devi
 	# valid_metrics['rec_loss'] = valid_metrics['rec_loss'].item() / (len(valid_loader.dataset) / valid_loader.batch_size)
 	# valid_metrics['gen_loss'] = valid_metrics['gen_loss'].item() / (len(valid_loader.dataset) / valid_loader.batch_size)
 	# valid_metrics['dis_loss'] = valid_metrics['dis_loss'].item() / (len(valid_loader.dataset) / valid_loader.batch_size)
-	valid_metrics['auc'] = valid_metrics['auc'] / (len(valid_loader.dataset) / valid_loader.batch_size)
+	valid_metrics['auc'] = valid_metrics['auc'] / (batch_idx+1)
 	valid_metrics['patch_auc'] = valid_metrics['patch_auc'] / (len(valid_loader.dataset) / valid_loader.batch_size)
 
 	return valid_metrics

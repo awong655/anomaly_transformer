@@ -68,10 +68,10 @@ def main(args):
 		elif args.autoenc == 'convolutional':
 			r_net = R_Net(in_channels=1, std=args.std, skip=args.res, cat=args.cat).to(device)
 		if args.disc == 'separate':
-			#d_net = trans_d_net(image_size=32, patch_size=4, dim=32,
-			#					depth=3, heads=4, mlp_dim=32, channels=1,
-			#					dim_disc_head=16).to(device)
-			d_net = D_Net(in_resolution=(28, 28), in_channels=1).to(device)
+			d_net = trans_d_net(image_size=32, patch_size=4, dim=32,
+								depth=3, heads=4, mlp_dim=32, channels=1,
+								dim_disc_head=16).to(device)
+			#d_net = D_Net(in_resolution=(28, 28), in_channels=1).to(device)
 		elif args.disc == 'combined':
 			d_net = trans_d_net_combined(image_size=32, patch_size=4, dim=128,
 								depth=3, heads=4, mlp_dim=32, channels=1,
