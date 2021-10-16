@@ -34,7 +34,8 @@ def train_model_combined(r_net: torch.nn.Module,
 						 rec_loss_bound: float = 0.1,
 						 lambd: float = 0.2,
 						 device: torch.device = torch.device('cpu'),
-						 save_path: tuple = ('.','r_net.pth','d_net.pth')) -> tuple:
+						 save_path: tuple = ('.','r_net.pth','d_net.pth'),
+						 target_cls = 1) -> tuple:
 
 	model_path = os.path.join(save_path[0], 'models')
 	metric_path= os.path.join(save_path[0], 'metrics')
@@ -273,7 +274,7 @@ def validate_single_epoch(r_net, d_net, r_loss, d_loss, valid_loader, device, ep
 			x = data[0].to(device)
 			x_enc, x_recon = r_net(x)
 			#x_real_anomalies = get_patch_visualizations(d_net, x_real)
-			x_anomalies = get_patch_visualizations(d_net, r_net, x)
+			#x_anomalies = get_patch_visualizations(d_net, r_net, x)
 			# print("Real Prediction", torch.sigmoid(d_net(x_real)))
 			# print("Fake Prediction", torch.sigmoid(d_net(x_fake)))
 
@@ -324,6 +325,8 @@ def validate_single_epoch_recon(r_net, d_net, r_loss, d_loss, valid_loader, devi
 			targets[targets < 0] = 1
 			x = data[0].to(device)
 			x_recon = r_net(x)
+
+			x_anomalies = get_patch_visualizations(d_net, r_net, x)
 
 			# torch to tensorflow
 			targets = targets.cpu().numpy()

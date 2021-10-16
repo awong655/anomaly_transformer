@@ -6,9 +6,10 @@ import torchvision.transforms as tf
 from train import train_model
 from train_combined_trans import train_model_combined
 from train_conv_ae import train_conv_ae
+from train_no_discrim_conv_ae import train_recon_err_conv_ae
 from analyze import analyze_model
 from model import R_Net, D_Net, R_Loss, D_Loss, R_WLoss, D_WLoss, D_Loss_combined, R_Loss_combined, \
-	Dataset, trans_r_net, trans_d_net, trans_d_net_combined
+	Dataset, trans_r_net, trans_d_net, trans_d_net_combined, Recon_Loss
 import numpy as np
 
 def main(args):
@@ -35,7 +36,7 @@ def main(args):
 									download=False, 
 									transform=tf.Compose([tf.Resize((32, 32)), tf.ToTensor(), tf.Normalize((0.1307,), (0.3081,))]))
 	# Train and validate only on pictures of 1
-	train_dataset = Dataset(train_raw_dataset, [1])
+	train_dataset = Dataset(train_raw_dataset, [args.target_cls])
 	valid_dataset = Dataset(valid_raw_dataset, [0,1,2,3,4,5,6,7,8,9])
 	#valid_dataset = Dataset(valid_raw_dataset, [1])
 	#indices = np.arange(0,len(valid_dataset))
@@ -61,11 +62,12 @@ def main(args):
 	else:
 		#r_net = R_Net(in_channels = 1, std = args.std, skip = args.res, cat = args.cat).to(device)
 		#d_net = D_Net(in_resolution = (28, 28), in_channels = 1).to(device)
-		if args.autoenc == 'transformer':
+		if args.autoenc == 'transformer' or 'recon_err_only':
 			r_net = trans_r_net(image_size=32, patch_size=4, dim=128, depth=3, heads=4, mlp_dim=64,
 							channels=1, gen_depth1=5, gen_depth2=2, gen_depth3=2, gen_init_size=8,
 							gen_dim=128, gen_heads=4, gen_mlp_ratio=4, gen_drop_rate=0.5).to(device)
 		elif args.autoenc == 'convolutional':
+			print("convolutional AE")
 			r_net = R_Net(in_channels=1, std=args.std, skip=args.res, cat=args.cat).to(device)
 		if args.disc == 'separate':
 			d_net = trans_d_net(image_size=32, patch_size=4, dim=32,
@@ -90,25 +92,32 @@ def main(args):
 						learning_rate=args.lr, rec_loss_bound=args.rec_bound,
 						save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd, test_class=args.classes_to_analyze)
 	else:
-		if args.autoenc == 'convolutional':
+		if args.autoenc == 'recon_err_only':
+			model = train_recon_err_conv_ae(r_net, d_net, train_dataset, valid_dataset, Recon_Loss, D_Loss,
+								  optimizer_class=torch.optim.RMSprop,
+								  device=device, batch_size=args.batch_size, optim_r_params=optim_r_params,
+								  optim_d_params=optim_d_params,
+								  learning_rate=args.lr, rec_loss_bound=args.rec_bound, max_epochs=args.epochs,
+								  save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd,target_cls=args.target_cls)
+		elif args.autoenc == 'convolutional':
 			model = train_conv_ae(r_net, d_net, train_dataset, valid_dataset, R_Loss, D_Loss,
 								optimizer_class=torch.optim.RMSprop,
 								device=device, batch_size=args.batch_size, optim_r_params=optim_r_params,
 								optim_d_params=optim_d_params,
 								learning_rate=args.lr, rec_loss_bound=args.rec_bound, max_epochs=args.epochs,
-								save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd)
-		if args.disc == 'separate':
+								save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd,target_cls=args.target_cls)
+		elif args.disc == 'separate':
 			model = train_model(r_net, d_net, train_dataset, valid_dataset, R_Loss, D_Loss, optimizer_class=torch.optim.RMSprop,
 							device=device, batch_size=args.batch_size, optim_r_params=optim_r_params, optim_d_params=optim_d_params,
 							learning_rate=args.lr, rec_loss_bound=args.rec_bound, max_epochs=args.epochs,
-							save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd)
+							save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd,target_cls=args.target_cls)
 		elif args.disc == 'combined':
 			model = train_model_combined(r_net, d_net, train_dataset, valid_dataset, R_Loss_combined, D_Loss_combined,
 								optimizer_class=torch.optim.RMSprop,
 								device=device, batch_size=args.batch_size, optim_r_params=optim_r_params,
 								optim_d_params=optim_d_params,
 								learning_rate=args.lr, rec_loss_bound=args.rec_bound, max_epochs=args.epochs,
-								save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd)
+								save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd,target_cls=args.target_cls)
 
 	#avg_auc = test_model()
 
@@ -136,6 +145,7 @@ if __name__ == "__main__":
 	parser.add_argument('--classes_to_analyze', '-cta', type=int, default=1, help='which mnist class to analyze')
 	parser.add_argument('--autoenc', '-ae', type=str, default='transformer', help='What kind of autoencoder to use')
 	parser.add_argument('--disc', '-dc', type=str, default='separate', help='What kind of discriminator to use')
+	parser.add_argument('--target_cls', '-tcs', type=int, default=1, help='which mnist class to use as inlier for anomaly detection')
 	args = parser.parse_args()
 
 	main(args)

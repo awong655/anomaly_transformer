@@ -214,6 +214,10 @@ class D_Net(torch.nn.Module):
 		out = self.fc(x)
 
 		return out
+def Recon_Loss(x_input, x_recon):
+	#print(x_input.shape)
+	#print(x_recon.shape)
+	return F.mse_loss(x_input, x_recon)
 
 def R_Loss_combined(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor, x_real_enc, lambd: float) -> dict:
 

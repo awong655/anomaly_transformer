@@ -34,7 +34,8 @@ def train_conv_ae(r_net: torch.nn.Module,
 						 rec_loss_bound: float = 0.1,
 						 lambd: float = 0.2,
 						 device: torch.device = torch.device('cpu'),
-						 save_path: tuple = ('.','r_net.pth','d_net.pth')) -> tuple:
+						 save_path: tuple = ('.','r_net.pth','d_net.pth'),
+				  			target_cls = 1) -> tuple:
 
 	model_path = os.path.join(save_path[0], 'models')
 	metric_path= os.path.join(save_path[0], 'metrics')
