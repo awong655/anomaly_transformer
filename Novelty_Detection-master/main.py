@@ -35,7 +35,9 @@ def main(args):
 									train=False, 
 									download=False, 
 									transform=tf.Compose([tf.Resize((32, 32)), tf.ToTensor(), tf.Normalize((0.1307,), (0.3081,))]))
-	# Train and validate only on pictures of 1
+
+
+	# Train and validate only on pictures of args.target_cls
 	train_dataset = Dataset(train_raw_dataset, [args.target_cls])
 	valid_dataset = Dataset(valid_raw_dataset, [0,1,2,3,4,5,6,7,8,9])
 	#valid_dataset = Dataset(valid_raw_dataset, [1])
@@ -93,6 +95,7 @@ def main(args):
 						save_step=args.sstep, num_workers=args.nw, save_path=save_path, lambd=args.lambd, test_class=args.classes_to_analyze)
 	else:
 		if args.autoenc == 'recon_err_only':
+			d_net = None
 			model = train_recon_err_conv_ae(r_net, d_net, train_dataset, valid_dataset, Recon_Loss, D_Loss,
 								  optimizer_class=torch.optim.RMSprop,
 								  device=device, batch_size=args.batch_size, optim_r_params=optim_r_params,

@@ -51,11 +51,11 @@ def train_recon_err_conv_ae(r_net: torch.nn.Module,
 	print(f'Metrics will be saved in {metric_path}')
 
 	optim_r = optimizer_class(r_net.parameters(), lr = learning_rate, **optim_r_params)
-	optim_d = optimizer_class(d_net.parameters(), lr = 0.001, **optim_d_params)
+	optim_d = None
 
 	if lr_scheduler:
 		scheduler_r = lr_scheduler(optim_r, **scheduler_r_params)
-		scheduler_d = lr_scheduler(optim_d, **scheduler_d_params)
+		#scheduler_d = lr_scheduler(optim_d, **scheduler_d_params)
 
 	train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=batch_size, pin_memory=pin_memory, num_workers=num_workers)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, shuffle=True, batch_size=batch_size, pin_memory=pin_memory, num_workers=num_workers)
@@ -103,11 +103,11 @@ def train_recon_err_conv_ae(r_net: torch.nn.Module,
 		if epoch % save_step == 0:
 			if highestAUCIndex == epoch:
 				torch.save(r_net, r_net_path)
-				torch.save(d_net, d_net_path)
+				#torch.save(d_net, d_net_path)
 
 		if valid_metrics['rec_loss'] < rec_loss_bound and train_metrics['rec_loss'] < rec_loss_bound:
 			torch.save(r_net, r_net_path)
-			torch.save(d_net, d_net_path)
+			#torch.save(d_net, d_net_path)
 			print('Reconstruction loss achieved optimum')
 			print('Stopping training')
 
@@ -142,7 +142,7 @@ def train_auc_pred(d_net, r_net, x_real, x_fake):
 def train_single_epoch(r_net, d_net, optim_r, optim_d, r_loss, d_loss, train_loader, lambd, device, epoch) -> dict:
 
 	r_net.train()
-	d_net.train()
+	#d_net.train()
 
 	train_metrics = {'rec_loss' : 0, 'gen_loss' : 0, 'dis_loss' : 0, 'auc' : 0}
 
@@ -244,7 +244,7 @@ def auc_pred(d_net, r_net, x, targets):
 
 def validate_single_epoch_recon(r_net, d_net, r_loss, d_loss, valid_loader, device, epoch, test_class=1) -> dict:
 	r_net.eval()
-	d_net.eval()
+	#d_net.eval()
 
 	valid_metrics = {'rec_loss': 0, 'gen_loss': 0, 'dis_loss': 0, 'auc': 0, 'patch_auc': 0}
 

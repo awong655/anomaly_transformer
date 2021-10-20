@@ -68,7 +68,7 @@ def train_model(r_net: torch.nn.Module,
 
 		start = timer()
 		train_metrics = train_single_epoch(r_net, d_net, optim_r, optim_d, r_loss, d_loss, train_loader, lambd, device, epoch)
-		valid_metrics = validate_single_epoch_recon(r_net, d_net, r_loss, d_loss, valid_loader, device, epoch, test_class=1)
+		valid_metrics = validate_single_epoch(r_net, d_net, r_loss, d_loss, valid_loader, device, epoch, test_class=1)
 		time = timer() - start
 
 		metrics['train']['rec_loss'].append(train_metrics['rec_loss'])
