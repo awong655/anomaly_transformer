@@ -283,8 +283,8 @@ def D_Loss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor, d
 # Wasserstein GAN loss (https://arxiv.org/abs/1701.07875)
 
 def R_WLoss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor, lambd: float) -> dict:
-
-	pred = torch.sigmoid(d_net(x_fake))
+	pred, _ = d_net(x_fake)
+	#pred = torch.sigmoid(pred)
 
 	rec_loss = F.mse_loss(x_fake, x_real)
 	gen_loss = -torch.mean(pred) # Wasserstein G loss: - E[ D(G(x)) ]
@@ -294,9 +294,11 @@ def R_WLoss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor, 
 	return {'rec_loss' : rec_loss, 'gen_loss' : gen_loss, 'L_r' : L_r}
 
 def D_WLoss(d_net: torch.nn.Module, x_real: torch.Tensor, x_fake: torch.Tensor) -> torch.Tensor:
+	pred_real, _ = d_net(x_real)
+	pred_fake, _ = d_net(x_fake.detach())
 
-	pred_real = torch.sigmoid(d_net(x_real))
-	pred_fake = torch.sigmoid(d_net(x_fake.detach()))
+	#pred_real = torch.sigmoid(pred_real)
+	#pred_fake = torch.sigmoid(pred_fake)
 	
 	dis_loss = -torch.mean(pred_real) + torch.mean(pred_fake) # Wasserstein D loss: -E[D(x_real)] + E[D(x_fake)]
 
