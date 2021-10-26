@@ -52,8 +52,8 @@ def main(args):
 			#d_net = D_Net(in_resolution = (28, 28), in_channels = 1).to(device)
 			if args.autoenc == 'transformer' or args.autoenc == 'recon_err_only':
 				print("Transformer AE")
-				r_net = trans_r_net(image_size=32, patch_size=4, dim=128, depth=2, heads=3, mlp_dim=128,
-									channels=1, gen_depth1=3, gen_depth2=1, gen_depth3=1, gen_init_size=8,
+				r_net = trans_r_net(image_size=32, patch_size=4, dim=128, depth=3, heads=4, mlp_dim=128,
+									channels=1, gen_depth1=5, gen_depth2=2, gen_depth3=2, gen_init_size=8,
 									gen_dim=128, gen_heads=4, gen_mlp_ratio=4, gen_drop_rate=0.5).to(device)
 			elif args.autoenc == 'convolutional':
 				print("convolutional AE with Transformer Discrim")
@@ -67,7 +67,7 @@ def main(args):
 			elif args.disc == 'combined':
 				print("convolutional AE with Transformer Discrim (with connection)")
 				d_net = trans_d_net_combined(image_size=32, patch_size=4, dim=128,
-									depth=3, heads=4, mlp_dim=32, channels=1,
+									depth=3, heads=4, mlp_dim=128, channels=1,
 									dim_disc_head=16).to(device)
 			print('Created models')
 

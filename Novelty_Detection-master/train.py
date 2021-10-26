@@ -232,9 +232,19 @@ def train_single_epoch(r_net, d_net, optim_r, optim_d, r_loss, d_loss, train_loa
 	ae_step_count = 0
 	for batch_idx, data in enumerate(train_loader):
 		x_real = data[0].to(device)
-		_, x_fake = r_net(x_real, noise=True)
+		_, x_fake = r_net(x_real)
 
-		if (batch_idx % ae_steps == 0 or disc_step_count != 0):
+		if batch_idx % disc_steps == 0:
+			d_net.zero_grad()
+
+			dis_loss = d_loss(d_net, x_real, x_fake)
+
+			dis_loss.backward()
+			optim_d.step()
+			disc_bkprop_count += 1
+			train_metrics['dis_loss'] += dis_loss.item()
+
+		if (batch_idx % ae_steps == 0):
 			disc_step_count = disc_steps
 			r_net.zero_grad()
 
@@ -247,16 +257,7 @@ def train_single_epoch(r_net, d_net, optim_r, optim_d, r_loss, d_loss, train_loa
 			train_metrics['gen_loss'] += r_metrics['gen_loss'].item()
 			disc_step_count -= 1
 
-		if batch_idx % ae_steps != 0 and disc_step_count == 0:
 
-			d_net.zero_grad()
-
-			dis_loss = d_loss(d_net, x_real, x_fake)
-
-			dis_loss.backward()
-			optim_d.step()
-			disc_bkprop_count += 1
-			train_metrics['dis_loss'] += dis_loss.item()
 
 
 		with torch.no_grad():
